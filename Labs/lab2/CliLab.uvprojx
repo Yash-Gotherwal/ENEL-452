@@ -403,6 +403,16 @@
               <FileType>5</FileType>
               <FilePath>.\IOdef.h</FilePath>
             </File>
+            <File>
+              <FileName>Cli.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\Cli.c</FilePath>
+            </File>
+            <File>
+              <FileName>Cli.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\Cli.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>
