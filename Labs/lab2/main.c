@@ -25,6 +25,9 @@ function in them respectively.
 
 Phase 3:
 -Add functionality to CLI_Transmit and CLI_Recieve to send and recieve commands to turn led on and off.
+	-Added a buffer which stores a usart recieve and later compares it using strncmp
+	-After comparing the strings the proper if case is executed
+	-Available commands: "on","off","status","help"
 
 
 */
@@ -39,7 +42,7 @@ int main(void)
 	serial_open();			//Enable required registers
 	
 	while(1){
-		uint8_t sendData[] = "hello,world! \n";
+		uint8_t sendData[] = "Type desired command.";
 		uint8_t recieveData[50];
 		
 		CLI_Transmit(sendData, sizeof(sendData));

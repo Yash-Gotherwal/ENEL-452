@@ -60,10 +60,8 @@ int sendbyte(uint8_t b) 	//Transmit function
 {
   while (!(USART2->SR & USART_SR_TXE)){}     // Wait for the TXE flag to be set
   USART2->DR = b;		    // Write the character to the data register
-
 	// Wait for the transmission to complete by checking the TC (transmission complete) flag
 	// while (!(USART2->SR & USART_SR_TC));	<---{used in Next lab}
-		
   return 0;  // Return 0 to indicate success
 }
 
