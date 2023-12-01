@@ -8,11 +8,29 @@ with CLI and user interrupt. For my milestone i want to get the cli status windo
 working which will show the tasks currently running.
 
 V1:
-implements a working CLI Status window where user can enter commands such as g or 1.
+implements a working CLI Status window where user can enter commands such as p1,g or 1.
 For my milestone i needed a working cli status window i was able to add tasks for 
 movement. i plan to add 4 more floors and change background or font colour for each floor
 for elevator move task
 
+V2:
+-Added commands for floors 1-5.
+-Added escape sequences so that font changes for each floor.
+-Cleaned up main.c by creating InitializeCLI,ProcessReceivedChar,UpdateStatus functions in Cli.c
+ which are called in vCLITask and vMoveElevator.
+-Added a bit more comments for tasks and explaination
+-removed unused floor message char. array from cli.c as i was not able to figure it out
+-Added a typedef in Cli.h and added pointers in CLI_Recieve and updated CLI_Task to
+remove char command[] from global variable. By doing so encountering an error where
+first input is not being considered. i.e. first command does not work.
+-Commented out set_screen function and function call in main.c as i included that in
+InitializeCLI
+-Tabified code and tried to make commenting clearer
+
+----------****To-DO****------------
+-Add maintainence mode and Userbutton handler
+	-Enable EXTI and check if remap to PC13 required
+-Check requirements from project and add stuff accordingly
 
 
 */
@@ -23,96 +41,83 @@ for elevator move task
 #include <stdint.h>
 
 #define Move_ELEVATOR_TASK_PRIORITY	(tskIDLE_PRIORITY + 2)
-#define	Cli_TASK_PRIORITY						(tskIDLE_PRIORITY + 1)
+#define Cli_TASK_PRIORITY					(tskIDLE_PRIORITY + 1)
 
-static void vMoveElevator(void * parameters);
-static void vCLITask(void * parameters);
+static void vMoveElevator(void *parameters);
+static void vCLITask(void *parameters);
 
-extern char command[];
 extern QueueHandle_t xMoveElevator;
 extern QueueHandle_t xCliQueue;
 
 int main(void)
 {
-	serial_open();
-	set_screen();
+		serial_open();
+		//set_screen();
 
-	xCliQueue = xQueueCreate(1, sizeof(char));
-	xMoveElevator = xQueueCreate(1, sizeof(int)); 
-	xTaskCreate(vMoveElevator, "MOVE", configMINIMAL_STACK_SIZE, NULL, Move_ELEVATOR_TASK_PRIORITY, NULL);
-	xTaskCreate(vCLITask, "CLI", configMINIMAL_STACK_SIZE, NULL, Cli_TASK_PRIORITY, NULL);
-	vTaskStartScheduler(); // start the scheduler
-	return 0;
+		// Create queues and tasks
+		xCliQueue = xQueueCreate(1, sizeof(char));
+		xMoveElevator = xQueueCreate(1, sizeof(int)); 
+		xTaskCreate(vMoveElevator, "MOVE", configMINIMAL_STACK_SIZE, NULL, Move_ELEVATOR_TASK_PRIORITY, NULL);
+		xTaskCreate(vCLITask, "CLI", configMINIMAL_STACK_SIZE, NULL, Cli_TASK_PRIORITY, NULL);
+
+		vTaskStartScheduler(); // Start the scheduler
+
+		return 0;
 }
 
-
-
-static void vMoveElevator(void * parameters) 
+// Task to move the elevator
+static void vMoveElevator(void *parameters) 
 {
 	int currentFloor = 1;
-  int targetFloor = 1;
+	int targetFloor = 1;
+
 	for (;;) 
-	{
-		BaseType_t status = xQueueReceive(xMoveElevator, &targetFloor, 100); 
-		if (status == pdTRUE) 
-			{
-       // Check the direction to move (up or down)
-       int direction = (targetFloor > currentFloor) ? 1 : -1;
-       // Move the elevator to the target floor
-       while (currentFloor != targetFloor) 
-				 {
-					// Simulate the elevator moving to the next floor
-					vTaskDelay(pdMS_TO_TICKS(2500)); // Adjust the delay as needed
-					// Update the current floor based on the direction
-					currentFloor += direction;
-					CLI_Transmit(SCROLL_REGION, sizeof(SCROLL_REGION));	//set the scroll window
-					CLI_Transmit(CLEAR_SCREEN, sizeof(CLEAR_SCREEN));	//clear the screen 
-					CLI_Transmit(MOVE_CURSOR_TOP, sizeof(MOVE_CURSOR_TOP));	//move cursor to the status window
-					const char* statusWin = "\r\nFloor: ";
-					// Calculate the length of the concatenated string
-					size_t totalLength = strlen(statusWin) + 1; // +1 for the null terminator
-					char buffer[50]; // Adjust the size based on your needs
-					// Convert the current floor to a string and concatenate
-					snprintf(buffer, sizeof(buffer), "%s%d\r\n", statusWin, currentFloor);
-					uint16_t statusWinLength = strlen(buffer);
-					uint8_t* dataSt = (uint8_t*)buffer; //send the new frequency
-					CLI_Transmit(dataSt, statusWinLength);
-					CLI_Transmit(SCROLL_REGION, sizeof(SCROLL_REGION)); //scroll
-					CLI_Transmit(RESTORE_CURSOR, sizeof(RESTORE_CURSOR)); //move cursor back to messgae 
-					CLI_Transmit(MOVE_CURSOR_MIDDLE, sizeof(MOVE_CURSOR_MIDDLE));	
-				 }
-		  }
-	}
+	 {
+		BaseType_t status = xQueueReceive(xMoveElevator, &targetFloor, 100);
+
+		if (status == pdTRUE)
+		 {
+			// Check the direction to move (up or down)
+			int direction = (targetFloor > currentFloor) ? 1 : -1;
+
+			// Move the elevator to the target floor
+			while (currentFloor != targetFloor) 
+			 {
+				// Simulate the elevator moving to the next floor
+				vTaskDelay(pdMS_TO_TICKS(2500)); // Adjust the delay as needed
+				
+				// Update the current floor based on the direction
+				currentFloor += direction;
+
+				// Update the status on the CLI
+				UpdateStatus(currentFloor);
+			 }
+		 }
+	 }
 }
 
-static void vCLITask(void * parameters)
+// Task for CLI processing
+static void vCLITask(void *parameters) 
 {
-	CLI_Transmit(SCROLL_REGION, sizeof(SCROLL_REGION));	//set the scroll window
-  CLI_Transmit(CLEAR_SCREEN, sizeof(CLEAR_SCREEN));	//clear the screen 
-	CLI_Transmit(MOVE_CURSOR_TOP, sizeof(MOVE_CURSOR_TOP));	//move cursor to the status window
-	const char* statusWin = "\r\nFloor: 1\r\n";		
-	uint16_t statusWinLength = strlen(statusWin);
-	uint8_t* dataSt = (uint8_t*)statusWin; //send the new frequency
-	CLI_Transmit(dataSt, statusWinLength);
-	CLI_Transmit(SCROLL_REGION, sizeof(SCROLL_REGION)); //scroll
-	CLI_Transmit(RESTORE_CURSOR, sizeof(RESTORE_CURSOR)); //move cursor back to messgae 
-	CLI_Transmit(MOVE_CURSOR_MIDDLE, sizeof(MOVE_CURSOR_MIDDLE));	//move the cursor to the message window	
-	
+	InitializeCLI();	// Set up the initial CLI display
+	CommandData cmd;
 	uint8_t charReceived;
-	
-	for (;;) 
-	{
-		BaseType_t status = xQueueReceive(xCliQueue, &charReceived, 100); //block until there is something in the queue
-		if (status == pdTRUE) 
-			{ 
-			 if(charReceived == 0x08 || charReceived == 0x7f) { //backspace or delete has been pressed
-			 charReceived = 0x7f; //ensure delete is sent
-			}	
-				sendbyte(charReceived);	//send received character
-				CLI_Receive(&charReceived);	//append to the overall message/check message value
-			}
-	}
-}
 
+	// Prompt for user input
+	const char* Message = "\r\nWhat floor?: ";
+	uint16_t length = (uint16_t)strlen(Message);
+	uint8_t* message = (uint8_t*)Message;	
+	CLI_Transmit(message, length); 
+
+	for (;;) 
+	 {
+		BaseType_t status = xQueueReceive(xCliQueue, &charReceived, 100);
+		
+		if (status == pdTRUE)
+			{
+			 ProcessReceivedChar(&cmd,charReceived);
+			}
+	 }
+}
 
 
