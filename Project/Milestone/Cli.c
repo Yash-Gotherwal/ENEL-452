@@ -10,6 +10,7 @@
 //char command[10] = ""; 			<--- removed from global added as a typedef in Cli.h
 QueueHandle_t xMoveElevator;
 
+
 int sendbyte(uint8_t b)
 {
 	TIM2->SR &= ~TIM_SR_UIF;	// Clear update flag first
@@ -38,8 +39,8 @@ int sendbyte(uint8_t b)
 					TIM2->SR &= ~TIM_SR_UIF;		// Clear the update flag
 					TIM2->CR1 &= ~TIM_CR1_CEN;	// Stop the timer
 					return 1;
-				 }
-			}
+				}
+		}
 		/*Stop timer*/
 		TIM2->CR1 &= ~TIM_CR1_CEN;
 		TIM2->CNT = 0; // Reset the timer counter
@@ -47,7 +48,7 @@ int sendbyte(uint8_t b)
 		return 0; // Success
 }
 
- char getbyte(void) 		//Recieve function
+char getbyte(void) 		//Recieve function
 {
 	while(!(USART2->SR & USART_SR_RXNE));
 	return (char)(USART2->DR);
@@ -146,6 +147,14 @@ void CLI_Receive(CommandData *cmdData, uint8_t *pData)
 								CLI_Transmit(message, length);
 								xQueueSendToFrontFromISR(xMoveElevator, &Floor, NULL);
 							}
+							else if (strcmp(cmdData->command, "e") == 0)	//Emergency stop command
+							{
+								const char* DisplayMessage = "\a\x1b[41mEmergency stop authorized shutting system down...\r\n";
+								uint16_t length = (uint16_t)strlen(DisplayMessage);
+								uint8_t* message = (uint8_t*)DisplayMessage;
+								CLI_Transmit(message, length);
+								exit(0);
+							}
 							memset(cmdData->command, 0, sizeof(cmdData->command));
 							break;
 
@@ -160,23 +169,43 @@ void CLI_Receive(CommandData *cmdData, uint8_t *pData)
 }
 
 void UpdateStatus(int currentFloor)
-	{
-	 CLI_Transmit(SCROLL_REGION, sizeof(SCROLL_REGION));			// Set the scroll window
-	 CLI_Transmit(CLEAR_SCREEN, sizeof(CLEAR_SCREEN));				// Clear the screen
-	 CLI_Transmit(MOVE_CURSOR_TOP, sizeof(MOVE_CURSOR_TOP));	// Move cursor to the status window
+{
+	CLI_Transmit(SCROLL_REGION, sizeof(SCROLL_REGION));			// Set the scroll window
+	CLI_Transmit(CLEAR_SCREEN, sizeof(CLEAR_SCREEN));				// Clear the screen
+	CLI_Transmit(MOVE_CURSOR_TOP, sizeof(MOVE_CURSOR_TOP));	// Move cursor to the status window
 
-	 // Construct and transmit the status message
-	 const char* statusWin = "\r\nFloor: ";
-	 char buffer[50];	// Adjust the size based on your needs
-	 snprintf(buffer, sizeof(buffer), "%s%d\r\n", statusWin, currentFloor);
-	 uint16_t statusWinLength = strlen(buffer);
-	 uint8_t* dataSt = (uint8_t*)buffer;
-	 CLI_Transmit(dataSt, statusWinLength);
-
-	 // Perform scroll, restore cursor position, and move cursor to the message area
-	 CLI_Transmit(SCROLL_REGION, sizeof(SCROLL_REGION));
-	 CLI_Transmit(RESTORE_CURSOR, sizeof(RESTORE_CURSOR));
-	 CLI_Transmit(MOVE_CURSOR_MIDDLE, sizeof(MOVE_CURSOR_MIDDLE));
+	// Open and close door message
+	const char* OpeningMessage = "\r\n---Door Opening--- ";
+	uint16_t length = (uint16_t)strlen(OpeningMessage);
+	uint8_t* message = (uint8_t*)OpeningMessage;	
+	CLI_Transmit(message, length); 
+	vTaskDelay(2500);
+	const char* ClosingMessage = "\r\---Door Closing--- ";
+	uint16_t length1 = (uint16_t)strlen(ClosingMessage);
+	uint8_t* message1 = (uint8_t*)ClosingMessage;	
+	CLI_Transmit(message1, length1); 
+	vTaskDelay(1000);
+		
+	CLI_Transmit(CLEAR_SCREEN, sizeof(CLEAR_SCREEN));
+	 
+	//floor display message
+	const char* statusmessage = "\r\nYou are now on Floor: ";
+	char buffer[50];	
+	snprintf(buffer, sizeof(buffer), "%s%d\r\n", statusmessage, currentFloor);
+	uint16_t statusWinLength = strlen(buffer);
+	uint8_t* dataSt = (uint8_t*)buffer;
+	CLI_Transmit(dataSt, statusWinLength);	
+		
+	// Perform scroll, restore cursor position, and move cursor to the message area
+	CLI_Transmit(SCROLL_REGION, sizeof(SCROLL_REGION));
+	CLI_Transmit(RESTORE_CURSOR, sizeof(RESTORE_CURSOR));
+	CLI_Transmit(MOVE_CURSOR_MIDDLE, sizeof(MOVE_CURSOR_MIDDLE));
+		
+	const char* NextPrompt = "\r\nWhich floor next?: ";
+	uint16_t length2 = (uint16_t)strlen(NextPrompt);
+	uint8_t* message2 = (uint8_t*)NextPrompt;	
+	CLI_Transmit(message2, length2); 
+		
 }
 
 void InitializeCLI(void)
@@ -196,14 +225,14 @@ void InitializeCLI(void)
 }
 
 void ProcessReceivedChar(CommandData *cmdData, uint8_t charReceived)
-	{
-		if (charReceived == 0x08 || charReceived == 0x7f) {
+{
+		if (charReceived == 0x08 || charReceived == 0x7f) 
+			{
 				charReceived = 0x7f;	// Ensure delete is sent
-		}
+			}
 
-		sendbyte(charReceived);				// Send the received character
-		CLI_Receive(cmdData,&charReceived);		// Append to the overall message/check message value
+				sendbyte(charReceived);				// Send the received character
+				CLI_Receive(cmdData,&charReceived);		// Append to the overall message/check message value
 }
-
 
 
